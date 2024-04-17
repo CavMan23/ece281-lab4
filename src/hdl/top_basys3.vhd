@@ -96,7 +96,13 @@ architecture top_basys3_arch of top_basys3 is
 	signal w_stop : std_logic;
 	signal w_clk : std_logic;
 	signal w_floor : std_logic_vector(3 downto 0);
-	signal w_light_display : std_logic;
+	signal w_tens_holder : std_logic_vector(3 downto 0);
+	signal w_decimal_holder : std_logic_vector(3 downto 0);
+	signal w_display : std_logic_vector(3 downto 0);
+	signal w_tdm_clk : std_logic;
+    
+
+
 	
     component elevator_controller_fsm is
         Port ( i_clk     : in  STD_LOGIC;
@@ -113,7 +119,7 @@ architecture top_basys3_arch of top_basys3 is
     end component sevenSegDecoder;
     
     component clock_divider is
-        generic ( constant k_DIV : natural := 50000000    ); -- How many clk cycles until slow clock toggles
+        generic ( constant k_DIV : natural := 50000000  ); -- How many clk cycles until slow clock toggles
                                                    -- Effectively, you divide the clk double this 
                                                    -- number (e.g., k_DIV := 2 --> clock divider of 4)
         port (     i_clk    : in std_logic;
@@ -121,15 +127,39 @@ architecture top_basys3_arch of top_basys3 is
                 o_clk    : out std_logic           -- divided (slow) clock
         );
     end component clock_divider;
+    
+    component TDM4 is
+        generic ( constant k_WIDTH : natural  := 4); -- bits in input and output
+        Port ( i_clk        : in  STD_LOGIC;
+               i_reset      : in  STD_LOGIC; -- asynchronous
+               i_D3         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               i_D2         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               i_D1         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               i_D0         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               o_data       : out STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               o_sel        : out STD_LOGIC_VECTOR (3 downto 0)    -- selected data line (one-cold)
+        );
+    end component TDM4;
   
 begin
 	-- PORT MAPS ----------------------------------------
+	
+	UUT_TDM4: TDM4 port map (
+	   i_clk => w_tdm_clk,
+	   i_reset => btnR or btnU,
+	   i_D3 => w_tens_holder,
+	   i_D2 => w_decimal_holder,
+	   i_D1 => (others => '1'),
+	   i_D0 => (others => '1'),
+	   o_data => w_display,
+	   o_sel => an
+	   );
     
     UUT_sevenSegDecoder: sevenSegDecoder port map (
-        i_D => w_floor,
+        i_D => w_display,
         o_S => seg  -- You might need to connect this output to something in your design
     );
-    
+     
    UUT_elevator_controller_fsm: elevator_controller_fsm port map (
         i_clk => w_clk,
         i_reset => btnR or btnU,
@@ -138,21 +168,45 @@ begin
         o_floor => w_floor
     );
     
-    UUT_clock_divider: clock_divider port map (
+    UUT_clock_divider: clock_divider generic map (K_DIV => 50000000)
+    port map (
          i_clk => clk,
          i_reset => btnL or btnU,
          o_clk => w_clk
      );    
+     
+    UUT_clock_dividerTDM: clock_divider generic map (K_DIV => 2500) 
+    port map(
+        i_clk => clk,
+        i_reset => btnL or btnU,
+        o_clk => w_tdm_clk
+        );
 	
 	-- CONCURRENT STATEMENTS ----------------------------
 	
 	-- LED 15 gets the FSM slow clock signal. The rest are grounded.
 	led(15) <= w_clk;
 	led(14 downto 0) <= (others => '0');
-	w_light_display <= '0';
+
 	-- leave unused switches UNCONNECTED. Ignore any warnings this causes.
-	 an <= (2 => w_light_display, others => '1');
+
 	-- wire up active-low 7SD anodes (an) as required
 	-- Tie any unused anodes to power ('1') to keep them off
 	
+	register_proc : process (w_floor)
+	begin
+	   if w_floor = "0000" then
+           w_tens_holder <= "0001";
+           w_decimal_holder <= "0110";
+	   elsif w_floor >= "1010" then
+	       w_tens_holder <= "0001";
+	       w_decimal_holder <= std_logic_vector(unsigned(w_floor) - 10);
+	   else 
+	       w_tens_holder <= "0000";
+	       w_decimal_holder <= w_floor;
+	   end if;
+    end process;
+an(0) <= '1';
+an(1) <= '1';
+
 end top_basys3_arch;
