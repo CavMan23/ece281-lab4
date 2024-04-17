@@ -100,6 +100,8 @@ architecture top_basys3_arch of top_basys3 is
 	signal w_decimal_holder : std_logic_vector(3 downto 0);
 	signal w_display : std_logic_vector(3 downto 0);
 	signal w_tdm_clk : std_logic;
+	signal w_combined_RU : std_logic;
+	signal w_combined_LU : std_logic;
     
 
 
@@ -143,10 +145,12 @@ architecture top_basys3_arch of top_basys3 is
   
 begin
 	-- PORT MAPS ----------------------------------------
+	w_combined_RU <= btnR or btnU;
+	w_combined_LU <= btnU or btnL;
 	
 	UUT_TDM4: TDM4 port map (
 	   i_clk => w_tdm_clk,
-	   i_reset => btnR or btnU,
+	   i_reset => w_combined_RU,
 	   i_D3 => w_tens_holder,
 	   i_D2 => w_decimal_holder,
 	   i_D1 => (others => '1'),
@@ -162,7 +166,7 @@ begin
      
    UUT_elevator_controller_fsm: elevator_controller_fsm port map (
         i_clk => w_clk,
-        i_reset => btnR or btnU,
+        i_reset => w_combined_RU,
         i_stop => sw(0),
         i_up_down => sw(1),
         o_floor => w_floor
@@ -171,14 +175,14 @@ begin
     UUT_clock_divider: clock_divider generic map (K_DIV => 50000000)
     port map (
          i_clk => clk,
-         i_reset => btnL or btnU,
+         i_reset => w_combined_LU,
          o_clk => w_clk
      );    
      
     UUT_clock_dividerTDM: clock_divider generic map (K_DIV => 2500) 
     port map(
         i_clk => clk,
-        i_reset => btnL or btnU,
+        i_reset => w_combined_LU,
         o_clk => w_tdm_clk
         );
 	
